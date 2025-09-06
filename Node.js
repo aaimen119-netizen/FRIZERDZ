@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json());
 
 // 📍 البورت + التوكينات
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const VERIFY_TOKEN = "080808"; // لازم يكون نفسو في فيسبوك
 
@@ -71,10 +71,8 @@ async function sendTextMessage(psid, text) {
 
 // ✅ مسار اختبار
 app.get("/test", (req, res) => {
-  res.send("✅ البوت شغال على البورت 5000");
+  res.send("✅ السيرفر شغال 100% على Replit");
 });
 
 // ✅ تشغيل السيرفر
-app.listen(PORT, () => {
-  console.log(`✅ السيرفر شغال صح على البورت ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Bot running on port ${PORT}`));
