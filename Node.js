@@ -4,74 +4,70 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 
 dotenv.config();
+
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+// 📍 البورت + التوكينات
+const PORT = process.env.PORT || 3000;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+const VERIFY_TOKEN = "080808"; // لازم يكون نفسو في فيسبوك
 
+// 📍 إعداد OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ✅ للتحقق من الويبهوك
+// ✅ Webhook verification
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("WEBHOOK_VERIFIED");
-    res.status(200).send(challenge);
-  } else {
-    res.sendStatus(403);
+  if (mode && token) {
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ WEBHOOK_VERIFIED");
+      return res.status(200).send(challenge);
+    } else {
+      return res.sendStatus(403);
+    }
   }
 });
 
-// ✅ استقبال الرسائل
+// ✅ استقبال الرسائل من ماسنجر
 app.post("/webhook", async (req, res) => {
   try {
     for (const entry of req.body.entry || []) {
       for (const event of entry.messaging || []) {
-        const senderId = event.sender?.id;
+        const senderId = event.sender.id;
         if (event.message?.text) {
           const userText = event.message.text;
 
-          // استدعاء OpenAI
-          const ai = await openai.chat.completions.create({
+          // 🔹 رد من الذكاء الاصطناعي
+          const ai = await openai.responses.create({
             model: "gpt-4o-mini",
-            messages: [{ role: "user", content: userText }]
+            input: [{ role: "user", content: userText }],
           });
 
-          const reply =
-            ai.choices[0]?.message?.content ||
-            "لم أفهم، حاول إعادة الصياغة.";
-
+          const reply = ai.output_text || "لم أفهم، حاول إعادة الصياغة.";
           await sendTextMessage(senderId, reply);
         }
       }
     }
     res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Webhook error:", error);
+  } catch (err) {
+    console.error("❌ Error:", err.message);
     res.sendStatus(500);
   }
 });
 
-// ✅ إرسال رسالة إلى Messenger
+// ✅ دالة إرسال الرسائل
 async function sendTextMessage(psid, text) {
-  try {
-    await axios.post(
-      `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-      {
-        recipient: { id: psid },
-        message: { text }
-      }
-    );
-  } catch (err) {
-    console.error("❌ Error sending message:", err.response?.data || err.message);
-  }
+  await axios.post(
+    `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+    { recipient: { id: psid }, message: { text } }
+  );
 }
 
-app.listen(PORT, () => console.log("🚀 Bot running on port", PORT));
+// ✅ تشغيل السيرفر
+app.listen(PORT, () => console.log(`🚀 Bot running on port ${PORT}`));
