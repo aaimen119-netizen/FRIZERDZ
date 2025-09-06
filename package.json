@@ -1,15 +1,15 @@
 {
   "name": "messenger-chatgpt-bot",
   "version": "1.0.0",
-  "description": "Facebook Messenger bot powered by ChatGPT",
-  "main": "server.js",
+  "description": "Messenger bot connected to ChatGPT using Node.js, Express, and OpenAI",
+  "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "axios": "^1.6.7",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "openai": "^4.0.0"
   }
