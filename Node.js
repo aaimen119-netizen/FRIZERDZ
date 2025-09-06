@@ -4,64 +4,57 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 
 dotenv.config();
-
 const app = express();
 app.use(express.json());
 
-// 📍 البورت + التوكينات
+// المنفذ (مهم جدًا في Replit)
 const PORT = process.env.PORT || 3000;
+
+// التوكنات من ملف .env (Secrets في Replit)
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const VERIFY_TOKEN = "080808"; // لازم يكون نفسو في فيسبوك
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// 📍 إعداد OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// ✅ Webhook verification
+// التحقق من الويبهوك
 app.get("/webhook", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
+  console.log("🔎 Webhook verification request:", req.query);
 
-  if (mode && token) {
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("✅ WEBHOOK_VERIFIED");
-      return res.status(200).send(challenge);
-    } else {
-      return res.sendStatus(403);
-    }
+  if (req.query["hub.verify_token"] === VERIFY_TOKEN) {
+    return res.send(req.query["hub.challenge"]);
   }
+  res.sendStatus(403);
 });
 
-// ✅ استقبال الرسائل من ماسنجر
+// استقبال الرسائل
 app.post("/webhook", async (req, res) => {
-  try {
-    for (const entry of req.body.entry || []) {
-      for (const event of entry.messaging || []) {
-        const senderId = event.sender.id;
-        if (event.message?.text) {
-          const userText = event.message.text;
+  console.log("📩 Incoming message:", JSON.stringify(req.body, null, 2));
 
-          // 🔹 رد من الذكاء الاصطناعي
+  for (const entry of req.body.entry || []) {
+    for (const event of entry.messaging || []) {
+      const senderId = event.sender.id;
+      if (event.message?.text) {
+        const userText = event.message.text;
+
+        try {
+          // رد بالذكاء الاصطناعي
           const ai = await openai.responses.create({
             model: "gpt-4o-mini",
-            input: [{ role: "user", content: userText }],
+            input: [{ role: "user", content: userText }]
           });
 
           const reply = ai.output_text || "لم أفهم، حاول إعادة الصياغة.";
           await sendTextMessage(senderId, reply);
+        } catch (err) {
+          console.error("❌ Error from OpenAI:", err.message);
+          await sendTextMessage(senderId, "حصل خطأ في المعالجة، حاول مرة أخرى.");
         }
       }
     }
-    res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ Error:", err.message);
-    res.sendStatus(500);
   }
+  res.sendStatus(200);
 });
 
-// ✅ دالة إرسال الرسائل
+// دالة إرسال رسالة إلى Messenger
 async function sendTextMessage(psid, text) {
   await axios.post(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
@@ -69,5 +62,5 @@ async function sendTextMessage(psid, text) {
   );
 }
 
-// ✅ تشغيل السيرفر
+// تشغيل السيرفر
 app.listen(PORT, () => console.log(`🚀 Bot running on port ${PORT}`));
