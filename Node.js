@@ -1,82 +1,77 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const request = require("request");
+import express from "express";
+import axios from "axios";
+import dotenv from "dotenv";
+import OpenAI from "openai";
 
+dotenv.config();
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 
-// المتغيرات من Secrets في Replit
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-
-// ✅ تحديد البورت الصحيح (Replit يعطيه أو 5000 محليًا)
 const PORT = process.env.PORT || 5000;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-// Route للتأكد من Facebook Webhook
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// ✅ للتحقق من الويبهوك
 app.get("/webhook", (req, res) => {
-  let mode = req.query["hub.mode"];
-  let token = req.query["hub.verify_token"];
-  let challenge = req.query["hub.challenge"];
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
 
-  if (mode && token) {
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("WEBHOOK_VERIFIED");
-      res.status(200).send(challenge);
-    } else {
-      res.sendStatus(403);
-    }
-  }
-});
-
-// Route لاستقبال الرسائل من Facebook
-app.post("/webhook", (req, res) => {
-  let body = req.body;
-
-  if (body.object === "page") {
-    body.entry.forEach(function(entry) {
-      let webhookEvent = entry.messaging[0];
-      let senderId = webhookEvent.sender.id;
-
-      if (webhookEvent.message && webhookEvent.message.text) {
-        let receivedMessage = webhookEvent.message.text;
-
-        // هنا تقدر تربط بالـ OpenAI API أو تجاوب عادي
-        sendMessage(senderId, `انت كتبت: ${receivedMessage}`);
-      }
-    });
-
-    res.status(200).send("EVENT_RECEIVED");
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("WEBHOOK_VERIFIED");
+    res.status(200).send(challenge);
   } else {
-    res.sendStatus(404);
+    res.sendStatus(403);
   }
 });
 
-// دالة لإرسال رسالة للـ Messenger
-function sendMessage(senderId, response) {
-  let requestBody = {
-    recipient: { id: senderId },
-    message: { text: response }
-  };
+// ✅ استقبال الرسائل
+app.post("/webhook", async (req, res) => {
+  try {
+    for (const entry of req.body.entry || []) {
+      for (const event of entry.messaging || []) {
+        const senderId = event.sender?.id;
+        if (event.message?.text) {
+          const userText = event.message.text;
 
-  request(
-    {
-      uri: "https://graph.facebook.com/v12.0/me/messages",
-      qs: { access_token: PAGE_ACCESS_TOKEN },
-      method: "POST",
-      json: requestBody
-    },
-    (err, res, body) => {
-      if (!err) {
-        console.log("message sent!");
-      } else {
-        console.error("Unable to send message:" + err);
+          // استدعاء OpenAI
+          const ai = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: userText }]
+          });
+
+          const reply =
+            ai.choices[0]?.message?.content ||
+            "لم أفهم، حاول إعادة الصياغة.";
+
+          await sendTextMessage(senderId, reply);
+        }
       }
     }
-  );
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Webhook error:", error);
+    res.sendStatus(500);
+  }
+});
+
+// ✅ إرسال رسالة إلى Messenger
+async function sendTextMessage(psid, text) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+      {
+        recipient: { id: psid },
+        message: { text }
+      }
+    );
+  } catch (err) {
+    console.error("❌ Error sending message:", err.response?.data || err.message);
+  }
 }
 
-// تشغيل السيرفر
-app.listen(PORT, () => {
-  console.log(`Bot running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log("🚀 Bot running on port", PORT));
